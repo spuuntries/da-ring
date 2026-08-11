@@ -76,9 +76,9 @@ export async function syncWithPeers(state: RingState): Promise<RingState> {
   const view = deriveView(state)
   let merged = state
 
-  for (const memberUrl of view.activeMembers) {
+  for (const member of view.members) {
     try {
-      const remote = await fetchRemoteState(memberUrl)
+      const remote = await fetchRemoteState(member.url)
       merged = merge(merged, remote)
     } catch {
       // skip unreachable peers
