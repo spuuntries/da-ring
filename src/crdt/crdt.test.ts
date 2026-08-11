@@ -243,6 +243,49 @@ describe('derive view', () => {
     assert.ok(view.members.find(m => m.url === 'https://bob.site')!.isActive)
     assert.ok(view.activeMembers.includes('https://bob.site'))
   })
+
+  it('allows re-adding a revoked member and clears revoked status', () => {
+    const { state, url, keys } = setupGenesis()
+    
+    // Alice adds Bob
+    addMember(state, url, keys.privateKey, 'https://bob.site', 'bob')
+    
+    // Alice revokes Bob
+    const revokeOp = createRevokeOp(url, 'https://bob.site', allOpIds(state), keys.privateKey)
+    state.set(revokeOp.id, revokeOp)
+
+    let view = deriveView(state)
+    assert.equal(view.members.length, 1)
+    
+    // Alice adds Carol
+    addMember(state, url, keys.privateKey, 'https://carol.site', 'carol')
+    const carolKeys = generateKeypair()
+    const carolKeyClaim = createKeyClaimOp('https://carol.site', carolKeys.publicKey, allOpIds(state), carolKeys.privateKey)
+    state.set(carolKeyClaim.id, carolKeyClaim)
+
+    // Carol re-adds Bob
+    addMember(state, 'https://carol.site', carolKeys.privateKey, 'https://bob.site', 'bob2')
+
+    view = deriveView(state)
+    assert.equal(view.members.length, 3) // alice, carol, bob
+
+    const bob = view.members.find(m => m.url === 'https://bob.site')
+    assert.ok(bob)
+    assert.equal(bob.invitedBy, 'https://carol.site') // Carol is the new inviter
+    
+    // Alice's invite tree should NOT have Bob anymore
+    assert.deepEqual(view.inviteTree.get(url) ?? [], ['https://carol.site'])
+    
+    // Carol's invite tree SHOULD have Bob
+    assert.deepEqual(view.inviteTree.get('https://carol.site') ?? [], ['https://bob.site'])
+
+    // Carol should be able to revoke Bob again (proving Bob is not immune)
+    const revoke2 = createRevokeOp('https://carol.site', 'https://bob.site', allOpIds(state), carolKeys.privateKey)
+    state.set(revoke2.id, revoke2)
+
+    view = deriveView(state)
+    assert.equal(view.members.length, 2) // alice, carol
+  })
 })
 
 // ── Ring Order Tests ─────────────────────────────────────────────
