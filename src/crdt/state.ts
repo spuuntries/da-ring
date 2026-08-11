@@ -164,6 +164,9 @@ export function deriveView(state: RingState): RingView {
         const used = invitesUsed.get(a.author) ?? 0
         if (used >= inviteBudget) break
 
+        // If target was previously revoked, clear it so they can be re-added
+        revoked.delete(a.payload.target)
+
         const inviterMember = members.get(a.author)!
         members.set(a.payload.target, {
           url: a.payload.target,
@@ -179,7 +182,9 @@ export function deriveView(state: RingState): RingView {
         const children = inviteTree.get(a.author) ?? []
         children.push(a.payload.target)
         inviteTree.set(a.author, children)
-        inviteTree.set(a.payload.target, [])
+        if (!inviteTree.has(a.payload.target)) {
+          inviteTree.set(a.payload.target, [])
+        }
 
         invitesUsed.set(a.author, used + 1)
         break
@@ -208,9 +213,18 @@ export function deriveView(state: RingState): RingView {
         while (toRevoke.length > 0) {
           const url = toRevoke.pop()!
           if (revoked.has(url)) continue
+          
           revoked.add(url)
           members.delete(url)
           activeMembers.delete(url)
+
+          // Remove from parent's invite tree
+          const parent = inviterOf.get(url)
+          if (parent) {
+            const parentChildren = inviteTree.get(parent) ?? []
+            inviteTree.set(parent, parentChildren.filter(c => c !== url))
+          }
+          inviterOf.delete(url)
 
           // Cascade to children
           const children = inviteTree.get(url) ?? []
