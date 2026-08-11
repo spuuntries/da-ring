@@ -66,10 +66,17 @@ export async function loadRingConfig(): Promise<{ name: string; inviteBudget: nu
 
 export async function fetchRemoteState(url: string): Promise<RingState> {
   const target = new URL('/webring.json', url).href
-  const res = await fetch(target)
-  if (!res.ok) throw new Error(`failed to fetch state from ${target}: ${res.status}`)
-  const ops = await res.json()
-  return deserialize(ops)
+  const controller = new AbortController()
+  const id = setTimeout(() => controller.abort(), 3000)
+
+  try {
+    const res = await fetch(target, { signal: controller.signal })
+    if (!res.ok) throw new Error(`failed to fetch state from ${target}: ${res.status}`)
+    const ops = await res.json()
+    return deserialize(ops)
+  } finally {
+    clearTimeout(id)
+  }
 }
 
 export async function syncWithPeers(state: RingState): Promise<RingState> {

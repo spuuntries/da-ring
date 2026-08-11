@@ -1,6 +1,6 @@
 import { defineCommand } from 'citty'
 import { createAddOp, allOpIds } from '../../crdt/index.js'
-import { loadKeys, loadState, saveState } from '../config.js'
+import { loadKeys, loadState, saveState, syncWithPeers } from '../config.js'
 
 export default defineCommand({
   meta: { name: 'invite', description: 'Invite a member to the webring' },
@@ -12,7 +12,7 @@ export default defineCommand({
     const keys = loadKeys()
     if (!keys) throw new Error('No local keys found')
 
-    const state = loadState()
+    let state = loadState()
     const seenIds = allOpIds(state)
     
     const op = createAddOp(
@@ -24,6 +24,7 @@ export default defineCommand({
     )
 
     state.set(op.id, op)
+    state = await syncWithPeers(state)
     saveState(state)
     
     console.log(`Invited ${args.url} to the webring`)
