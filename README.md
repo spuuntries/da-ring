@@ -195,6 +195,8 @@ all commands: `npx da-ring <command>`
 
 ## the crdt
 
+> **Note**: For a detailed technical breakdown of the CRDT, conflict resolution, and security model, see the [da-ring Specification](spec.md).
+
 the ring state is a **grow-only set of signed operations** (G-Set).
 
 ```
@@ -215,7 +217,7 @@ each operation is signed with Ed25519 and includes causal dependencies (`seen` o
 
 ### conflict resolution
 
-- revoke wins over concurrent add for same target
+- deterministic resolution of concurrent ops via causal order + ID tie-break
 - invite budget enforced at derivation time
 - only direct inviters can revoke their invitees
 - deterministic ring order via `SHA-256(member URL)`
