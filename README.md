@@ -70,7 +70,7 @@ export default {
 ### 2. initialize your ring
 
 ```bash
-npx tsx src/cli/index.ts init --url https://your.site
+npx da-ring init --url https://your.site
 ```
 
 this generates:
@@ -90,7 +90,7 @@ also add the widget to your own site:
 ### 3. invite friends
 
 ```bash
-npx tsx src/cli/index.ts invite https://friend.site --name "friend"
+npx da-ring invite https://friend.site --name "friend"
 ```
 
 re-deploy your updated `webring.json`, then tell your friend to paste the widget:
@@ -104,7 +104,9 @@ re-deploy your updated `webring.json`, then tell your friend to paste the widget
 
 > host the built `dist/index.widget.js` on your site or a CDN
 
-### 4. build the widget
+### 4. build (only after edits)
+
+`npm install` auto-builds everything. you only need to rebuild manually if you change the widget styles or ring config:
 
 ```bash
 npm run build
@@ -122,7 +124,7 @@ git clone https://github.com/ring-owner/da-ring
 cd da-ring && npm install
 
 # upgrade — pulls state from an active member, generates your keypair
-npx tsx src/cli/index.ts upgrade --ring https://alice.site --url https://your.site
+npx da-ring upgrade --ring https://alice.site --url https://your.site
 ```
 
 this generates their own `webring.json` + keypair. deploy both `webring.json` and the widget to your site:
@@ -139,7 +141,7 @@ now you're active — can invite others and contribute to ring redundancy. note 
 
 ## cli
 
-all commands: `npx tsx src/cli/index.ts <command>`
+all commands: `npx da-ring <command>`
 
 | command                                  | description                                      |
 | :--------------------------------------- | :----------------------------------------------- |

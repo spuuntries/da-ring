@@ -4,11 +4,15 @@
   "description": "Decentralized webring — fork this repo to create your own",
   "type": "module",
   "private": true,
+  "bin": {
+    "da-ring": "dist/cli/index.js"
+  },
   "scripts": {
     "build": "tsup",
+    "prepare": "tsup",
     "build:widget": "tsup src/widget/index.ts --format iife --global-name DaRing --minify --outDir dist",
     "build:cli": "tsup src/cli/index.ts --format esm --outDir dist/cli",
-    "ring": "node dist/cli/index.js",
+    "ring": "tsx src/cli/index.ts",
     "test": "node --import tsx --test src/**/*.test.ts"
   },
   "dependencies": {
