@@ -131,3 +131,33 @@ test('syncWithPeers dynamically discovers members across multiple hops', async (
     global.fetch = originalFetch
   }
 })
+
+test('fetchRemoteState aborts after timeout', async () => {
+  const originalFetch = global.fetch
+  
+  // Mock fetch to never resolve
+  global.fetch = async (url: RequestInfo | URL, options?: RequestInit) => {
+    return new Promise((resolve, reject) => {
+      // Listen for the abort signal and reject immediately when triggered
+      if (options?.signal) {
+        options.signal.addEventListener('abort', () => {
+          reject(new Error('AbortError: The operation was aborted'))
+        })
+      }
+    })
+  }
+
+  try {
+    const { fetchRemoteState } = await import('./config.js')
+    
+    // We expect this to reject after ~3000ms, but we don't want to wait 3 seconds in the test suite.
+    // However, since it's just a setTimeout in config.ts, node's test runner will actually wait 3s.
+    // For a real robust test we'd mock timers, but for this simple webring this is fine.
+    await assert.rejects(
+      fetchRemoteState('https://slow-node.site'),
+      (err: Error) => err.message.includes('AbortError')
+    )
+  } finally {
+    global.fetch = originalFetch
+  }
+})
