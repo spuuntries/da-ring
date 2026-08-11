@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="da-ring" width="250" style="margin: -3.5em" />
+  <img src="logo.png" alt="da-ring" width="250" style="margin: -5em" />
 </p>
 
 <h1 align="center">da-ring</h1>
