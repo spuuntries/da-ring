@@ -139,6 +139,29 @@ this generates their own `webring.json` + keypair. deploy both `webring.json` an
 
 now you're active — can invite others and contribute to ring redundancy. note the `data-ring` lists multiple bootstrap URLs for better resilience.
 
+## hosting & cors
+
+because the webring works by having browsers fetch `webring.json` from other members' domains, **your web server MUST be configured to send CORS headers** (`Access-Control-Allow-Origin: *`) for the json file.
+
+- **github pages**: usually enables this by default.
+- **vercel / netlify**: you must add a `vercel.json` or `netlify.toml` file to your site's root to explicitly add the headers.
+- **domain redirects**: if your host automatically redirects your naked domain to `www` (or vice versa), the 308 redirect response often drops custom CORS headers, breaking the fetch. to fix this, ensure the URLs in your `data-ring` script tag point directly to your primary non-redirecting domain.
+
+example `vercel.json` for vercel users:
+```json
+{
+  "headers": [
+    {
+      "source": "/webring.json",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, OPTIONS" }
+      ]
+    }
+  ]
+}
+```
+
 ## cli
 
 all commands: `npx da-ring <command>`
