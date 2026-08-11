@@ -71,3 +71,63 @@ test('syncWithPeers polls all members, not just active ones', async () => {
     global.fetch = originalFetch
   }
 })
+
+test('syncWithPeers dynamically discovers members across multiple hops', async () => {
+  const aliceKeys = generateKeypair()
+  const bobKeys = generateKeypair()
+  const charlieKeys = generateKeypair()
+
+  // Alice only knows about Bob initially
+  const aliceGenesis = createGenesisOp('https://alice.site', 'test ring', 2, aliceKeys.privateKey)
+  let aliceState = new Map()
+  aliceState.set(aliceGenesis.id, aliceGenesis)
+  
+  const aliceClaim = createKeyClaimOp('https://alice.site', aliceKeys.publicKey, allOpIds(aliceState), aliceKeys.privateKey)
+  aliceState.set(aliceClaim.id, aliceClaim)
+
+  const bobAdd = createAddOp('https://alice.site', 'https://bob.site', 'bob', allOpIds(aliceState), aliceKeys.privateKey)
+  aliceState.set(bobAdd.id, bobAdd)
+
+  // Bob's state knows about Bob claiming key, and Bob adding Charlie
+  const bobState = new Map(aliceState)
+  const bobClaim = createKeyClaimOp('https://bob.site', bobKeys.publicKey, allOpIds(bobState), bobKeys.privateKey)
+  bobState.set(bobClaim.id, bobClaim)
+
+  const charlieAdd = createAddOp('https://bob.site', 'https://charlie.site', 'charlie', allOpIds(bobState), bobKeys.privateKey)
+  bobState.set(charlieAdd.id, charlieAdd)
+
+  // Charlie's state knows about Charlie claiming key
+  const charlieState = new Map(bobState)
+  const charlieClaim = createKeyClaimOp('https://charlie.site', charlieKeys.publicKey, allOpIds(charlieState), charlieKeys.privateKey)
+  charlieState.set(charlieClaim.id, charlieClaim)
+
+  const originalFetch = global.fetch
+  let fetchedUrls: string[] = []
+
+  global.fetch = async (url: RequestInfo | URL, options?: RequestInit) => {
+    const urlStr = url.toString()
+    fetchedUrls.push(urlStr)
+
+    if (urlStr === 'https://bob.site/webring.json') {
+      return { ok: true, json: async () => Array.from(bobState.values()) } as Response
+    }
+    if (urlStr === 'https://charlie.site/webring.json') {
+      return { ok: true, json: async () => Array.from(charlieState.values()) } as Response
+    }
+    return { ok: false } as Response
+  }
+
+  try {
+    const syncedState = await syncWithPeers(aliceState)
+    const syncedView = deriveView(syncedState)
+
+    // Should fetch bob, discover charlie from bob's state, and then fetch charlie in the next loop
+    assert.equal(fetchedUrls.includes('https://bob.site/webring.json'), true, 'fetched bob')
+    assert.equal(fetchedUrls.includes('https://charlie.site/webring.json'), true, 'dynamically fetched charlie')
+    
+    assert.equal(syncedView.activeMembers.length, 3, 'all 3 should be active')
+    assert.equal(syncedView.activeMembers.includes('https://charlie.site'), true)
+  } finally {
+    global.fetch = originalFetch
+  }
+})
