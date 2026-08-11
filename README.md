@@ -19,6 +19,10 @@
 
 **fork this repo to create your own ring.**
 
+## example
+
+check out [`keks-ring`](https://github.com/spuuntries/keks-ring) for a live example of a webring built with da-ring! it's currently running at [spuun.art](https://spuun.art/).
+
 ## why
 
 traditional webrings have a central server that manages the member list. if that server goes down or the maintainer walks away, the ring dies. and someone has to babysit it.
@@ -49,12 +53,12 @@ most friends just need to be passive. the genesis member (you) is always active.
 
 ### 1. fork & configure
 
-fork [`spuuntries/da-ring`](https://github.com/spuuntries/da-ring) on github, then:
+fork [`spuuntries/da-ring`](https://github.com/spuuntries/da-ring) on github, or click **Use this template** to create your own repo. then:
 
 ```bash
-# ↓ change this to your fork's URL after forking
-git clone https://github.com/your-username/da-ring
-cd da-ring
+# ↓ change this to your repo's URL
+git clone https://github.com/your-username/your-repo-name
+cd your-repo-name
 npm install
 ```
 
