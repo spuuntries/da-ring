@@ -73,15 +73,25 @@ export async function fetchRemoteState(url: string): Promise<RingState> {
 }
 
 export async function syncWithPeers(state: RingState): Promise<RingState> {
-  const view = deriveView(state)
   let merged = state
+  const fetchedUrls = new Set<string>()
 
-  for (const member of view.members) {
-    try {
-      const remote = await fetchRemoteState(member.url)
-      merged = merge(merged, remote)
-    } catch {
-      // skip unreachable peers
+  while (true) {
+    const view = deriveView(merged)
+    const unfetched = view.members.filter(m => !fetchedUrls.has(m.url))
+
+    if (unfetched.length === 0) {
+      break
+    }
+
+    for (const member of unfetched) {
+      fetchedUrls.add(member.url)
+      try {
+        const remote = await fetchRemoteState(member.url)
+        merged = merge(merged, remote)
+      } catch {
+        // skip unreachable peers
+      }
     }
   }
 
