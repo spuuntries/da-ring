@@ -1,5 +1,5 @@
-import { deserialize, serialize, merge, deriveView } from '../crdt/index.js'
-import type { RingState } from '../crdt/index.js'
+import { deserialize, serialize, merge, deriveView, filterValidOps, fromOps } from '../crdt/index.js'
+import type { RingState, Op } from '../crdt/index.js'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -64,7 +64,7 @@ export async function loadRingConfig(): Promise<{ name: string; inviteBudget: nu
   }
 }
 
-export async function fetchRemoteState(url: string): Promise<RingState> {
+export async function fetchRemoteState(url: string): Promise<Op[]> {
   const target = new URL('/webring.json', url).href
   const controller = new AbortController()
   const id = setTimeout(() => controller.abort(), 3000)
@@ -73,7 +73,7 @@ export async function fetchRemoteState(url: string): Promise<RingState> {
     const res = await fetch(target, { signal: controller.signal })
     if (!res.ok) throw new Error(`failed to fetch state from ${target}: ${res.status}`)
     const ops = await res.json()
-    return deserialize(ops)
+    return ops
   } finally {
     clearTimeout(id)
   }
@@ -94,8 +94,9 @@ export async function syncWithPeers(state: RingState): Promise<RingState> {
     for (const member of unfetched) {
       fetchedUrls.add(member.url)
       try {
-        const remote = await fetchRemoteState(member.url)
-        merged = merge(merged, remote)
+        const remoteOps = await fetchRemoteState(member.url)
+        const validOps = filterValidOps(remoteOps, merged, member.url, false)
+        merged = merge(merged, fromOps(validOps))
       } catch {
         // skip unreachable peers
       }

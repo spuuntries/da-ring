@@ -1,8 +1,8 @@
-import { deserialize, merge, deriveView } from '../crdt/index.js'
-import type { RingState } from '../crdt/index.js'
+import { merge, deriveView, filterValidOps, fromOps, createState } from '../crdt/index.js'
+import type { Op } from '../crdt/index.js'
 import { renderWidget } from './render.js'
 
-async function fetchState(url: string): Promise<RingState | null> {
+async function fetchState(url: string): Promise<Op[] | null> {
   try {
     const controller = new AbortController()
     const id = setTimeout(() => controller.abort(), 3000)
@@ -19,7 +19,7 @@ async function fetchState(url: string): Promise<RingState | null> {
     const ops = await response.json()
     if (!Array.isArray(ops)) return null
 
-    return deserialize(ops)
+    return ops
   } catch {
     return null
   }
@@ -48,20 +48,23 @@ async function init() {
 
   // 1. Fetch from bootstrap URLs
   const fetchedUrls = new Set<string>()
-  const results = await Promise.all(bootstrapUrls.map(url => {
+  const results = await Promise.all(bootstrapUrls.map(async url => {
     fetchedUrls.add(url)
-    return fetchState(url)
+    const ops = await fetchState(url)
+    return { url, ops }
   }))
-  const validStates = results.filter((s): s is RingState => s !== null)
+  
+  const validResults = results.filter((r): r is { url: string, ops: Op[] } => r.ops !== null)
 
-  if (validStates.length === 0) {
+  if (validResults.length === 0) {
     renderWidget(container, null, currentUrl, 'error')
     return
   }
 
-  let mergedState = validStates[0]
-  for (let i = 1; i < validStates.length; i++) {
-    mergedState = merge(mergedState, validStates[i])
+  let mergedState = createState()
+  for (const { url, ops } of validResults) {
+    const validOps = filterValidOps(ops, mergedState, url, true)
+    mergedState = merge(mergedState, fromOps(validOps))
   }
 
   // 2. Dynamic discovery loop — fetch from ALL members (not just actives)
@@ -74,14 +77,16 @@ async function init() {
 
     if (unfetched.length === 0) break
 
-    const moreResults = await Promise.all(unfetched.map(m => {
+    const moreResults = await Promise.all(unfetched.map(async m => {
       fetchedUrls.add(m.url)
-      return fetchState(m.url)
+      const ops = await fetchState(m.url)
+      return { url: m.url, ops }
     }))
 
-    for (const state of moreResults) {
-      if (state) {
-        mergedState = merge(mergedState, state)
+    for (const { url, ops } of moreResults) {
+      if (ops) {
+        const validOps = filterValidOps(ops, mergedState, url, false)
+        mergedState = merge(mergedState, fromOps(validOps))
       }
     }
   }

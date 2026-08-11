@@ -147,3 +147,73 @@ function canonicalizeForVerify(op: Op): string {
 function computeIdFromOp(op: Op): string {
   return hash(canonicalizeForVerify(op))
 }
+
+// ── Transport-Layer Filtering ────────────────────────────────────
+
+/**
+ * Filter an array of ops fetched from `sourceUrl`, given the currently known valid state.
+ * Returns only the ops that are valid and should be merged.
+ */
+export function filterValidOps(
+  newOps: Op[],
+  currentState: RingState,
+  sourceUrl: string,
+  isBootstrap: boolean = false
+): Op[] {
+  const valid: Op[] = []
+  const tempState = new Map(currentState)
+  
+  // Helper to safely get origin
+  const getOrigin = (url: string) => {
+    try { return new URL(url).origin } catch { return url }
+  }
+  const sourceOrigin = getOrigin(sourceUrl)
+
+  // 1. Process key-claims first so we can verify other ops in the payload
+  for (const op of newOps) {
+    if (op.type === 'key-claim') {
+      const kc = op as KeyClaimOp
+      const existingKey = findPubkey(kc.author, currentState)
+      
+      if (existingKey) {
+        if (existingKey !== kc.payload.pubkey) continue // Spoof attempt against known identity
+      } else if (!isBootstrap) {
+        // Untrusted gossip: only trust if it came directly from the author's domain
+        const authorOrigin = getOrigin(kc.author)
+        if (authorOrigin !== sourceOrigin) continue
+      }
+      
+      // Verify self-attesting signature
+      const canonical = canonicalizeForVerify(kc)
+      if (verify(canonical, kc.sig, kc.payload.pubkey)) {
+        tempState.set(kc.id, kc)
+        valid.push(kc)
+      }
+    }
+  }
+
+  // Check if we already have a genesis op
+  const hasGenesis = [...currentState.values()].some(o => o.type === 'genesis')
+  
+  // 2. Process all other ops
+  for (const op of newOps) {
+    if (op.type === 'key-claim') continue // already processed
+    
+    if (op.type === 'genesis') {
+      if (hasGenesis && !currentState.has(op.id)) {
+        continue // Reject duplicate/conflicting genesis ops
+      }
+    }
+
+    const pubkey = findPubkey(op.author, tempState)
+    if (!pubkey) continue // No known pubkey, cannot verify signature
+
+    const canonical = canonicalizeForVerify(op)
+    if (verify(canonical, op.sig, pubkey)) {
+      tempState.set(op.id, op)
+      valid.push(op)
+    }
+  }
+  
+  return valid
+}

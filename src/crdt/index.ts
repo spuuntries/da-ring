@@ -15,5 +15,5 @@ export {
   allOpIds, deriveView, deriveRingOrder, getNeighbors,
 } from './state.js'
 
-export { validateOp, validateState } from './validate.js'
+export { validateOp, validateState, filterValidOps } from './validate.js'
 export type { ValidationResult } from './validate.js'
