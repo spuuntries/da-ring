@@ -5,7 +5,8 @@ import { loadKeys, loadState, saveState, syncWithPeers } from '../config.js'
 export default defineCommand({
   meta: { name: 'revoke', description: 'Revoke a member from the webring' },
   args: {
-    url: { type: 'positional', description: 'URL to revoke', required: true }
+    url: { type: 'positional', description: 'URL to revoke', required: true },
+    soft: { type: 'boolean', description: 'Soft-revoke (re-parent children instead of cascading)', required: false }
   },
   run: async ({ args }) => {
     const keys = loadKeys()
@@ -18,13 +19,14 @@ export default defineCommand({
       keys.url,
       args.url,
       seenIds,
-      keys.privateKey
+      keys.privateKey,
+      args.soft
     )
 
     state.set(op.id, op)
     state = await syncWithPeers(state)
     saveState(state)
     
-    console.log(`Revoked ${args.url} from the webring`)
+    console.log(`${args.soft ? 'Soft-revoked' : 'Revoked'} ${args.url} from the webring`)
   }
 })

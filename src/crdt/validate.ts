@@ -32,11 +32,18 @@ export function validateOp(op: Op, state: RingState): ValidationResult {
     errors.push(`op ID mismatch: expected ${expectedId}, got ${op.id}`)
   }
 
-  // 3. Look up author's pubkey for signature verification
-  const pubkey = findPubkey(op.author, state)
-  if (pubkey) {
+  // 3. Look up author's pubkeys for signature verification
+  const pubkeys = findAllPubkeys(op.author, state)
+  if (pubkeys.length > 0) {
     const canonical = canonicalizeForVerify(op)
-    if (!verify(canonical, op.sig, pubkey)) {
+    let anyValid = false
+    for (const pk of pubkeys) {
+      if (verify(canonical, op.sig, pk)) {
+        anyValid = true
+        break
+      }
+    }
+    if (!anyValid) {
       errors.push(`invalid signature for author ${op.author}`)
     }
   } else if (op.type !== 'genesis' && op.type !== 'key-claim') {
@@ -60,21 +67,21 @@ export function validateOp(op: Op, state: RingState): ValidationResult {
 
     case 'add': {
       // Author must have a pubkey (be active)
-      if (!pubkey) {
+      if (pubkeys.length === 0) {
         errors.push(`author ${op.author} has no pubkey (not active)`)
       }
       break
     }
 
     case 'revoke': {
-      if (!pubkey) {
+      if (pubkeys.length === 0) {
         errors.push(`author ${op.author} has no pubkey (not active)`)
       }
       break
     }
 
     case 'leave': {
-      if (!pubkey) {
+      if (pubkeys.length === 0) {
         errors.push(`author ${op.author} has no pubkey (not active)`)
       }
       break
@@ -121,18 +128,19 @@ export function validateState(state: RingState): ValidationResult {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-/** Find the pubkey for a member from their key-claim op */
-function findPubkey(author: string, state: RingState): string | null {
+/** Find all pubkeys published by a member (multiple key-claims allowed for rotation) */
+function findAllPubkeys(author: string, state: RingState): string[] {
+  const keys: string[] = []
   for (const op of state.values()) {
     if (op.type === 'key-claim' && op.author === author) {
-      return (op as KeyClaimOp).payload.pubkey
+      keys.push((op as KeyClaimOp).payload.pubkey)
     }
   }
-  return null
+  return keys
 }
 
 /** Recreate canonical content from an op (for ID verification) */
-function canonicalizeForVerify(op: Op): string {
+export function canonicalizeForVerify(op: Op): string {
   const ordered: Record<string, unknown> = {
     type: op.type,
     author: op.author,
@@ -173,12 +181,10 @@ export function filterValidOps(
   for (const op of newOps) {
     if (op.type === 'key-claim') {
       const kc = op as KeyClaimOp
-      const existingKey = findPubkey(kc.author, currentState)
       
-      if (existingKey) {
-        if (existingKey !== kc.payload.pubkey) continue // Spoof attempt against known identity
-      } else if (!isBootstrap) {
-        // Untrusted gossip: only trust if it came directly from the author's domain
+      if (!isBootstrap) {
+        // Untrusted gossip: only trust if it came directly from the author's domain.
+        // We now allow multiple key-claims (key rotation) as long as they pass this check.
         const authorOrigin = getOrigin(kc.author)
         if (authorOrigin !== sourceOrigin) continue
       }
@@ -205,11 +211,19 @@ export function filterValidOps(
       }
     }
 
-    const pubkey = findPubkey(op.author, tempState)
-    if (!pubkey) continue // No known pubkey, cannot verify signature
+    const pubkeys = findAllPubkeys(op.author, tempState)
+    if (pubkeys.length === 0) continue // No known pubkey, cannot verify signature
 
     const canonical = canonicalizeForVerify(op)
-    if (verify(canonical, op.sig, pubkey)) {
+    let anyValid = false
+    for (const pk of pubkeys) {
+      if (verify(canonical, op.sig, pk)) {
+        anyValid = true
+        break
+      }
+    }
+    
+    if (anyValid) {
       tempState.set(op.id, op)
       valid.push(op)
     }

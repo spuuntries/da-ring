@@ -46,6 +46,7 @@ export interface RevokeOp extends BaseOp {
   type: 'revoke'
   payload: {
     target: string
+    reparent?: boolean
   }
 }
 
@@ -139,13 +140,14 @@ export function createRevokeOp(
   target: string,
   seenIds: string[],
   privateKey: string,
+  reparent: boolean = false,
 ): RevokeOp {
   return signOp<RevokeOp>({
     type: 'revoke',
     author,
     timestamp: Date.now(),
     seen: seenIds,
-    payload: { target },
+    payload: { target, reparent },
   }, privateKey)
 }
 

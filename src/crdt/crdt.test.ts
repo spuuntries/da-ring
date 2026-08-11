@@ -171,12 +171,38 @@ describe('derive view', () => {
     assert.equal(view.members.length, 3)
 
     // Alice revokes bob — should cascade to carol
-    const revokeOp = createRevokeOp(url, 'https://bob.site', allOpIds(state), keys.privateKey)
+    const revokeOp = createRevokeOp(url, 'https://bob.site', allOpIds(state), keys.privateKey, false)
     state.set(revokeOp.id, revokeOp)
 
     view = deriveView(state)
     assert.equal(view.members.length, 1) // only alice left
     assert.equal(view.members[0].url, url)
+  })
+
+  it('soft-revoke re-parents children to the inviter', () => {
+    const { state, url, keys } = setupGenesis()
+
+    // alice → bob → carol
+    addMember(state, url, keys.privateKey, 'https://bob.site', 'bob')
+
+    const bobKeys = generateKeypair()
+    const bobKeyClaim = createKeyClaimOp(
+      'https://bob.site', bobKeys.publicKey,
+      allOpIds(state), bobKeys.privateKey,
+    )
+    state.set(bobKeyClaim.id, bobKeyClaim)
+
+    addMember(state, 'https://bob.site', bobKeys.privateKey, 'https://carol.site', 'carol')
+
+    // Alice SOFT-revokes bob — carol should be re-parented to alice
+    const revokeOp = createRevokeOp(url, 'https://bob.site', allOpIds(state), keys.privateKey, true)
+    state.set(revokeOp.id, revokeOp)
+
+    const view = deriveView(state)
+    assert.equal(view.members.length, 2) // alice, carol
+    const carol = view.members.find(m => m.url === 'https://carol.site')
+    assert.ok(carol)
+    assert.equal(carol.invitedBy, url) // re-parented to alice
   })
 
   it('voluntary leave re-parents children', () => {

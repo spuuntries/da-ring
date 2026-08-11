@@ -116,4 +116,92 @@ describe('security - transport-layer identity verification', () => {
     const filteredDiscovery = filterValidOps(opsFromBob, trueState, 'https://bob.site', false)
     assert.equal(filteredDiscovery.length, 0, 'Should reject gossiped key-claim from untrusted discovery node')
   })
+
+  it('allows key rotation via soft-revoke and re-invite', () => {
+    // 1. Alice creates the ring
+    const aliceKeys = generateKeypair()
+    const aliceGenesis = createGenesisOp('https://alice.site', 'alice ring', 2, aliceKeys.privateKey)
+    const aliceKeyClaim = createKeyClaimOp('https://alice.site', aliceKeys.publicKey, [aliceGenesis.id], aliceKeys.privateKey)
+    const state = fromOps([aliceGenesis, aliceKeyClaim])
+
+    // 2. Alice adds Bob
+    const bobKeysOld = generateKeypair()
+    const bobAdd = createAddOp('https://alice.site', 'https://bob.site', 'bob', allOpIds(state), aliceKeys.privateKey)
+    state.set(bobAdd.id, bobAdd)
+    const bobKeyClaim1 = createKeyClaimOp('https://bob.site', bobKeysOld.publicKey, allOpIds(state), bobKeysOld.privateKey)
+    state.set(bobKeyClaim1.id, bobKeyClaim1)
+
+    // Bob (with Key 1) invites Carol
+    const carolAdd = createAddOp('https://bob.site', 'https://carol.site', 'carol', allOpIds(state), bobKeysOld.privateKey)
+    state.set(carolAdd.id, carolAdd)
+
+    // 3. Bob loses Key 1. Alice SOFT-revokes Bob.
+    const softRevoke = createRevokeOp('https://alice.site', 'https://bob.site', allOpIds(state), aliceKeys.privateKey, true)
+    state.set(softRevoke.id, softRevoke)
+
+    // 4. Alice re-invites Bob
+    const bobReadd = createAddOp('https://alice.site', 'https://bob.site', 'bob', allOpIds(state), aliceKeys.privateKey)
+    state.set(bobReadd.id, bobReadd)
+
+    // 5. Bob claims NEW Key 2
+    const bobKeysNew = generateKeypair()
+    const bobKeyClaim2 = createKeyClaimOp('https://bob.site', bobKeysNew.publicKey, allOpIds(state), bobKeysNew.privateKey)
+    state.set(bobKeyClaim2.id, bobKeyClaim2)
+
+    // 6. Bob successfully invites Dave with his NEW key
+    const daveAdd = createAddOp('https://bob.site', 'https://dave.site', 'dave', allOpIds(state), bobKeysNew.privateKey)
+    state.set(daveAdd.id, daveAdd)
+
+    const view = deriveView(state)
+
+    // Verify Carol was saved and re-parented to Alice
+    const carol = view.members.find(m => m.url === 'https://carol.site')
+    assert.ok(carol, 'Carol should be saved')
+    assert.equal(carol.invitedBy, 'https://alice.site', 'Carol should be reparented to Alice')
+
+    // Verify Bob is active with his new key
+    const bob = view.members.find(m => m.url === 'https://bob.site')
+    assert.ok(bob && bob.isActive, 'Bob should be active again')
+    assert.equal(bob.pubkey, bobKeysNew.publicKey, 'Bob should be using the new key')
+
+    // Verify Dave was successfully invited by Bob using the new key
+    assert.ok(view.members.find(m => m.url === 'https://dave.site'), 'Dave should be successfully invited with new key')
+  })
+
+  it('blocks forgery attempt using a stolen old key after rotation', () => {
+    // Setup identical to the previous test up to step 5
+    const aliceKeys = generateKeypair()
+    const aliceGenesis = createGenesisOp('https://alice.site', 'alice ring', 2, aliceKeys.privateKey)
+    const aliceKeyClaim = createKeyClaimOp('https://alice.site', aliceKeys.publicKey, [aliceGenesis.id], aliceKeys.privateKey)
+    const state = fromOps([aliceGenesis, aliceKeyClaim])
+
+    const bobKeysOld = generateKeypair()
+    const bobAdd = createAddOp('https://alice.site', 'https://bob.site', 'bob', allOpIds(state), aliceKeys.privateKey)
+    state.set(bobAdd.id, bobAdd)
+    const bobKeyClaim1 = createKeyClaimOp('https://bob.site', bobKeysOld.publicKey, allOpIds(state), bobKeysOld.privateKey)
+    state.set(bobKeyClaim1.id, bobKeyClaim1)
+
+    const softRevoke = createRevokeOp('https://alice.site', 'https://bob.site', allOpIds(state), aliceKeys.privateKey, true)
+    state.set(softRevoke.id, softRevoke)
+
+    const bobReadd = createAddOp('https://alice.site', 'https://bob.site', 'bob', allOpIds(state), aliceKeys.privateKey)
+    state.set(bobReadd.id, bobReadd)
+
+    const bobKeysNew = generateKeypair()
+    const bobKeyClaim2 = createKeyClaimOp('https://bob.site', bobKeysNew.publicKey, allOpIds(state), bobKeysNew.privateKey)
+    state.set(bobKeyClaim2.id, bobKeyClaim2)
+
+    // Attacker (with stolen Key 1) tries to invite Dave
+    const daveAdd = createAddOp('https://bob.site', 'https://dave.site', 'dave', allOpIds(state), bobKeysOld.privateKey)
+    
+    // Transport layer accepts it because it's signed by a historically known key
+    const filteredOps = filterValidOps([daveAdd], state, 'https://bob.site', true)
+    assert.equal(filteredOps.length, 1, 'Transport layer should accept the historically valid signature')
+    state.set(daveAdd.id, daveAdd)
+
+    const view = deriveView(state)
+
+    // Causal signature verification should reject Dave because the active key has rotated
+    assert.equal(view.members.find(m => m.url === 'https://dave.site'), undefined, 'Dave should be rejected due to obsolete key')
+  })
 })

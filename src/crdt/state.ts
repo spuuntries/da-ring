@@ -1,5 +1,15 @@
-import { hash } from '../crypto/keys.js'
+import { hash, verify } from '../crypto/keys.js'
+import { canonicalizeForVerify } from './validate.js'
 import type { Op, GenesisOp, AddOp, KeyClaimOp, RevokeOp, LeaveOp } from './ops.js'
+
+const sigCache = new Map<string, boolean>()
+function verifyCached(canonical: string, sig: string, pubkey: string): boolean {
+  const cacheKey = `${sig}:${pubkey}`
+  if (sigCache.has(cacheKey)) return sigCache.get(cacheKey)!
+  const isValid = verify(canonical, sig, pubkey)
+  sigCache.set(cacheKey, isValid)
+  return isValid
+}
 
 // ── Ring State (the G-Set CRDT) ──────────────────────────────────
 
@@ -133,6 +143,19 @@ export function deriveView(state: RingState): RingView {
   const revoked = new Set<string>()
 
   for (const op of sorted) {
+    // CAUSAL SIGNATURE VERIFICATION
+    // Enforce that the op is signed by the EXACT pubkey that is active in the causal timeline right now.
+    // This allows key rotation while strictly preventing an attacker from using an old compromised key
+    // to sign new ops.
+    if (op.type === 'add' || op.type === 'revoke' || op.type === 'leave') {
+      const member = members.get(op.author)
+      if (!member || !member.pubkey) continue // Ignore ops from inactive/unknown members
+      const canonical = canonicalizeForVerify(op)
+      if (!verifyCached(canonical, op.sig, member.pubkey)) {
+        continue // Signature invalid for the current causal timeline! Reject.
+      }
+    }
+
     switch (op.type) {
       case 'genesis': {
         const g = op as GenesisOp
@@ -208,32 +231,66 @@ export function deriveView(state: RingState): RingView {
         if (revoked.has(r.author)) break
         if (inviterOf.get(r.payload.target) !== r.author) break
 
-        // Cascade: revoke target and entire subtree
-        const toRevoke = [r.payload.target]
-        while (toRevoke.length > 0) {
-          const url = toRevoke.pop()!
-          if (revoked.has(url)) continue
+        if (r.payload.reparent) {
+          // Soft-revoke: Reparent target's children to the revoker (r.author)
+          const targetUrl = r.payload.target
           
-          revoked.add(url)
-          members.delete(url)
-          activeMembers.delete(url)
-
-          // Remove from parent's invite tree
-          const parent = inviterOf.get(url)
-          if (parent) {
-            const parentChildren = inviteTree.get(parent) ?? []
-            inviteTree.set(parent, parentChildren.filter(c => c !== url))
+          revoked.add(targetUrl)
+          members.delete(targetUrl)
+          activeMembers.delete(targetUrl)
+          
+          // Remove target from revoker's invite tree
+          const parentChildren = inviteTree.get(r.author) ?? []
+          inviteTree.set(r.author, parentChildren.filter(c => c !== targetUrl))
+          inviterOf.delete(targetUrl)
+          
+          // Re-parent children
+          const targetChildren = inviteTree.get(targetUrl) ?? []
+          const inviterChildren = inviteTree.get(r.author) ?? []
+          for (const child of targetChildren) {
+            inviterOf.set(child, r.author)
+            const childMember = members.get(child)
+            if (childMember) {
+              childMember.invitedBy = r.author
+              const inviterMember = members.get(r.author)
+              if (inviterMember) childMember.depth = inviterMember.depth + 1
+            }
+            inviterChildren.push(child)
           }
-          inviterOf.delete(url)
+          inviteTree.set(r.author, inviterChildren)
+          inviteTree.delete(targetUrl)
+          
+          // Give the inviter their invite slot back
+          const used = invitesUsed.get(r.author) ?? 0
+          invitesUsed.set(r.author, Math.max(0, used - 1))
+        } else {
+          // Hard-revoke: Cascade (existing logic)
+          const toRevoke = [r.payload.target]
+          while (toRevoke.length > 0) {
+            const url = toRevoke.pop()!
+            if (revoked.has(url)) continue
+            
+            revoked.add(url)
+            members.delete(url)
+            activeMembers.delete(url)
 
-          // Cascade to children
-          const children = inviteTree.get(url) ?? []
-          toRevoke.push(...children)
+            // Remove from parent's invite tree
+            const parent = inviterOf.get(url)
+            if (parent) {
+              const parentChildren = inviteTree.get(parent) ?? []
+              inviteTree.set(parent, parentChildren.filter(c => c !== url))
+            }
+            inviterOf.delete(url)
+
+            // Cascade to children
+            const children = inviteTree.get(url) ?? []
+            toRevoke.push(...children)
+          }
+
+          // Give the inviter their invite slot back
+          const used = invitesUsed.get(r.author) ?? 0
+          invitesUsed.set(r.author, Math.max(0, used - 1))
         }
-
-        // Give the inviter their invite slot back
-        const used = invitesUsed.get(r.author) ?? 0
-        invitesUsed.set(r.author, Math.max(0, used - 1))
         break
       }
 

@@ -152,6 +152,7 @@ because the webring works by having browsers fetch `webring.json` from other mem
 - **domain redirects**: if your host automatically redirects your naked domain to `www` (or vice versa), the 308 redirect response often drops custom CORS headers, breaking the fetch. to fix this, ensure the URLs in your `data-ring` script tag point directly to your primary non-redirecting domain.
 
 example `vercel.json` for vercel users:
+
 ```json
 {
   "headers": [
@@ -170,15 +171,15 @@ example `vercel.json` for vercel users:
 
 all commands: `npx da-ring <command>`
 
-| command                                  | description                                      |
-| :--------------------------------------- | :----------------------------------------------- |
-| **`init`** `--url <url>`                 | initialize a new ring                            |
-| **`invite`** `<url> --name <name>`       | invite someone                                   |
-| **`revoke`** `<url>`                     | revoke a member _(cascades to their invitees)_   |
-| **`leave`**                              | leave the ring _(your invitees get re-parented)_ |
-| **`upgrade`** `--ring <url> --url <url>` | passive → active                                 |
-| **`sync`**                               | pull state from active peers                     |
-| **`status`**                             | show ring info and invite tree                   |
+| command                                  | description                                                |
+| :--------------------------------------- | :--------------------------------------------------------- |
+| **`init`** `--url <url>`                 | initialize a new ring                                      |
+| **`invite`** `<url> --name <name>`       | invite someone                                             |
+| **`revoke`** `<url> [--soft]`            | revoke a member (cascades by default, `--soft` re-parents) |
+| **`leave`**                              | leave the ring _(your invitees get re-parented)_           |
+| **`upgrade`** `--ring <url> --url <url>` | passive → active                                           |
+| **`sync`**                               | pull state from active peers                               |
+| **`status`**                             | show ring info and invite tree                             |
 
 **`status` output:**
 
@@ -204,13 +205,13 @@ each operation is signed with Ed25519 and includes causal dependencies (`seen` o
 
 ### operations
 
-| op            | what it does                           | signed by |
-| :------------ | :------------------------------------- | :-------- |
-| **genesis**   | creates the ring, sets name + budget   | founder   |
-| **add**       | invites a new member                   | inviter   |
-| **key-claim** | publishes pubkey (passive → active)    | self      |
-| **revoke**    | removes invitee + cascades subtree     | inviter   |
-| **leave**     | exits, children re-parented to inviter | self      |
+| op            | what it does                             | signed by |
+| :------------ | :--------------------------------------- | :-------- |
+| **genesis**   | creates the ring, sets name + budget     | founder   |
+| **add**       | invites a new member                     | inviter   |
+| **key-claim** | publishes pubkey (passive → active)      | self      |
+| **revoke**    | removes invitee (cascades or re-parents) | inviter   |
+| **leave**     | exits, children re-parented to inviter   | self      |
 
 ### conflict resolution
 
@@ -230,9 +231,17 @@ alice (genesis)
 └── dave     ← alice can revoke
 ```
 
-- **revoke** cascades: revoking bob also removes carol
+- **revoke** cascades: revoking bob also removes carol (unless you use `--soft`, which re-parents carol to alice)
 - **leave** re-parents: if bob leaves, carol moves under alice
 - no voting, no quorum — the tree is the authority
+
+### key recovery & soft revokes
+
+if a member loses their private key (`.da-ring/keys.json`), they can no longer sign new operations.
+
+to recover, their inviter must use `npx da-ring revoke <url> --soft`. this removes the lost-key member from the ring, but **re-parents all of their invitees** to the inviter (saving innocent members from being nuked).
+
+after the soft-revoke, the inviter can re-invite them using the exact same URL. because da-ring enforces causal signature verification, the member can publish a brand new key for their URL without breaking the past, and attackers cannot use their stolen old key to forge new invites!
 
 ## customizing
 
