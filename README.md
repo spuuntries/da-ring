@@ -87,6 +87,8 @@ also add the widget to your own site:
 ></script>
 ```
 
+> host the built `dist/index.widget.js` on your site or a CDN. here it's been renamed as `widget.js` for simplicity, but you can rename the file into whatever, just change it in the `src` field when you're embedding the widget.
+
 ### 3. invite friends
 
 ```bash
@@ -101,8 +103,6 @@ re-deploy your updated `webring.json`, then tell your friend to paste the widget
   data-ring="https://your.site"
 ></script>
 ```
-
-> host the built `dist/index.widget.js` on your site or a CDN
 
 ### 4. build (only after edits)
 
