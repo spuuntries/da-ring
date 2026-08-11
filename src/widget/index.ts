@@ -26,7 +26,6 @@ async function fetchState(url: string): Promise<RingState | null> {
 }
 
 async function init() {
-  // Find our script tag
   const scriptTag = document.currentScript || document.querySelector('script[data-ring]')
   if (!scriptTag) return
 
@@ -35,11 +34,9 @@ async function init() {
 
   const currentUrl = window.location.origin
 
-  // Create container next to script tag
   const container = document.createElement('div')
   scriptTag.parentNode?.insertBefore(container, scriptTag.nextSibling)
 
-  // Show loading state
   renderWidget(container, null, currentUrl, 'loading')
 
   const bootstrapUrls = bootstrapAttr.split(',').map(s => s.trim()).filter(Boolean)
@@ -50,8 +47,11 @@ async function init() {
   }
 
   // 1. Fetch from bootstrap URLs
-  const fetchedUrls = new Set<string>(bootstrapUrls)
-  const results = await Promise.all(bootstrapUrls.map(url => fetchState(url)))
+  const fetchedUrls = new Set<string>()
+  const results = await Promise.all(bootstrapUrls.map(url => {
+    fetchedUrls.add(url)
+    return fetchState(url)
+  }))
   const validStates = results.filter((s): s is RingState => s !== null)
 
   if (validStates.length === 0) {
@@ -59,20 +59,24 @@ async function init() {
     return
   }
 
-  // Merge bootstrap states
   let mergedState = validStates[0]
   for (let i = 1; i < validStates.length; i++) {
     mergedState = merge(mergedState, validStates[i])
   }
 
-  // 2. Discover additional active members and fan-out
-  const initialView = deriveView(mergedState)
-  const newUrls = initialView.activeMembers.filter(url => !fetchedUrls.has(url))
+  // 2. Dynamic discovery loop — fetch from ALL members (not just actives)
+  //    because a member might be active but we don't know yet if the
+  //    bootstrap node hasn't synced their key-claim
+  while (true) {
+    const view = deriveView(mergedState)
+    const unfetched = view.members
+      .filter(m => !fetchedUrls.has(m.url))
 
-  if (newUrls.length > 0) {
-    const moreResults = await Promise.all(newUrls.map(url => {
-      fetchedUrls.add(url)
-      return fetchState(url)
+    if (unfetched.length === 0) break
+
+    const moreResults = await Promise.all(unfetched.map(m => {
+      fetchedUrls.add(m.url)
+      return fetchState(m.url)
     }))
 
     for (const state of moreResults) {
