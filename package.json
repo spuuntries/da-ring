@@ -1,0 +1,25 @@
+{
+  "name": "da-ring",
+  "version": "0.1.0",
+  "description": "Decentralized webring — fork this repo to create your own",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsup",
+    "build:widget": "tsup src/widget/index.ts --format iife --global-name DaRing --minify --outDir dist",
+    "build:cli": "tsup src/cli/index.ts --format esm --outDir dist/cli",
+    "ring": "node dist/cli/index.js",
+    "test": "node --import tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "@noble/ed25519": "^2.2.3",
+    "@noble/hashes": "^1.7.3",
+    "citty": "^0.1.6"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}
