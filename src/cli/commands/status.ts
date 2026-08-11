@@ -35,9 +35,9 @@ export default defineCommand({
       const isMe = keys && keys.url === url
 
       const connector = isRoot ? '' : (isLast ? '└── ' : '├── ')
-      const nameStr = isMe ? `\x1b[1m${member.name}\x1b[0m` : member.name
+      const nameStr = member.name === url ? '' : (isMe ? ` \x1b[1m${member.name}\x1b[0m` : ` ${member.name}`)
 
-      console.log(`${prefix}${connector}${url} ${nameStr} (${genesisTag}${statusTag})${slotsStr}`)
+      console.log(`${prefix}${connector}${url}${nameStr} (${genesisTag}${statusTag})${slotsStr}`)
 
       const children = view.inviteTree.get(url) ?? []
       const childPrefix = prefix + (isRoot ? '' : (isLast ? '    ' : '│   '))
