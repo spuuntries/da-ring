@@ -39,7 +39,7 @@ export default defineCommand({
 
       console.log(`${prefix}${connector}${url}${nameStr} (${genesisTag}${statusTag})${slotsStr}`)
 
-      const children = view.inviteTree.get(url) ?? []
+      const children = (view.inviteTree.get(url) ?? []).filter(childUrl => view.members.some(m => m.url === childUrl))
       const childPrefix = prefix + (isRoot ? '' : (isLast ? '    ' : '│   '))
 
       children.forEach((childUrl: string, index: number) => {
