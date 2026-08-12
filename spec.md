@@ -67,9 +67,9 @@ The CRDT guarantees eventual consistency. The following deterministic rules reso
 
 ## 5. Network & Hosting
 
-- **Nodes**: Any member who has published a `key-claim` and hosts `webring.json` is an "active" node. 
-- **CORS**: Active members MUST serve `webring.json` with `Access-Control-Allow-Origin: *` to allow client-side widget fetches.
-- **Widget Discovery Loop**: The browser widget (`dist/index.widget.js`) bootstraps from known active members. To prevent missing subtrees due to a stale bootstrap node, the widget's discovery loop eagerly attempts to fetch state from *all* known members, even those marked passive. Passive members gracefully 404, while recently active members provide their latest state, ensuring the network converges even when some nodes are out of sync.
+- **Nodes**: Any member who has published a `key-claim` and hosts `<slugified-ring-name>.json` is an "active" node. 
+- **CORS**: Active members MUST serve `<slugified-ring-name>.json` with `Access-Control-Allow-Origin: *` to allow client-side widget fetches.
+- **Widget Discovery Loop**: The browser widget (`dist/index.widget.js`) bootstraps from known active members. The widget relies on the `data-ring-name` attribute on its `<script>` tag to determine the filename to fetch. To prevent missing subtrees due to a stale bootstrap node, the widget's discovery loop eagerly attempts to fetch state from *all* known members, even those marked passive. Passive members gracefully 404, while recently active members provide their latest state, ensuring the network converges even when some nodes are out of sync.
 
 ## 6. Security & Spoofing Mitigation
 

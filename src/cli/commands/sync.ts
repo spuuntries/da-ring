@@ -1,12 +1,13 @@
 import { defineCommand } from 'citty'
-import { loadState, saveState, syncWithPeers } from '../config.js'
+import { loadState, saveState, syncWithPeers, loadRingConfig } from '../config.js'
 
 export default defineCommand({
   meta: { name: 'sync', description: 'Sync webring state with peers' },
   run: async () => {
-    const state = loadState()
-    const syncedState = await syncWithPeers(state)
-    saveState(syncedState)
+    const config = await loadRingConfig()
+    const state = await loadState()
+    const syncedState = await syncWithPeers(state, config.name)
+    await saveState(syncedState)
     console.log('Synced state with peers')
   }
 })

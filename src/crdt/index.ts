@@ -17,3 +17,5 @@ export {
 
 export { validateOp, validateState, filterValidOps } from './validate.js'
 export type { ValidationResult } from './validate.js'
+
+export { slugify } from './utils.js'

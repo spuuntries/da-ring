@@ -45,7 +45,7 @@ test('syncWithPeers polls all members, not just active ones', async () => {
     const urlStr = url.toString()
     fetchedUrls.push(urlStr)
     
-    if (urlStr === 'https://dave.site/webring.json') {
+    if (urlStr === 'https://dave.site/test-ring.json') {
       // Dave upgraded, return his state
       return {
         ok: true,
@@ -61,10 +61,10 @@ test('syncWithPeers polls all members, not just active ones', async () => {
   }
 
   try {
-    const syncedState = await syncWithPeers(state)
+    const syncedState = await syncWithPeers(state, 'test ring')
     const syncedView = deriveView(syncedState)
     
-    assert.equal(fetchedUrls.includes('https://dave.site/webring.json'), true, 'should have fetched from passive Dave')
+    assert.equal(fetchedUrls.includes('https://dave.site/test-ring.json'), true, 'should have fetched from passive Dave')
     assert.equal(syncedView.activeMembers.length, 3, 'Dave should now be active')
     assert.equal(syncedView.activeMembers.includes('https://dave.site'), true)
   } finally {
@@ -108,22 +108,22 @@ test('syncWithPeers dynamically discovers members across multiple hops', async (
     const urlStr = url.toString()
     fetchedUrls.push(urlStr)
 
-    if (urlStr === 'https://bob.site/webring.json') {
+    if (urlStr === 'https://bob.site/test-ring.json') {
       return { ok: true, json: async () => Array.from(bobState.values()) } as Response
     }
-    if (urlStr === 'https://charlie.site/webring.json') {
+    if (urlStr === 'https://charlie.site/test-ring.json') {
       return { ok: true, json: async () => Array.from(charlieState.values()) } as Response
     }
     return { ok: false } as Response
   }
 
   try {
-    const syncedState = await syncWithPeers(aliceState)
+    const syncedState = await syncWithPeers(aliceState, 'test ring')
     const syncedView = deriveView(syncedState)
 
     // Should fetch bob, discover charlie from bob's state, and then fetch charlie in the next loop
-    assert.equal(fetchedUrls.includes('https://bob.site/webring.json'), true, 'fetched bob')
-    assert.equal(fetchedUrls.includes('https://charlie.site/webring.json'), true, 'dynamically fetched charlie')
+    assert.equal(fetchedUrls.includes('https://bob.site/test-ring.json'), true, 'fetched bob')
+    assert.equal(fetchedUrls.includes('https://charlie.site/test-ring.json'), true, 'dynamically fetched charlie')
     
     assert.equal(syncedView.activeMembers.length, 3, 'all 3 should be active')
     assert.equal(syncedView.activeMembers.includes('https://charlie.site'), true)
@@ -154,7 +154,7 @@ test('fetchRemoteState aborts after timeout', async () => {
     // However, since it's just a setTimeout in config.ts, node's test runner will actually wait 3s.
     // For a real robust test we'd mock timers, but for this simple webring this is fine.
     await assert.rejects(
-      fetchRemoteState('https://slow-node.site'),
+      fetchRemoteState('https://slow-node.site', 'test ring'),
       (err: Error) => err.message.includes('AbortError')
     )
   } finally {

@@ -8,7 +8,7 @@ export default defineCommand({
     const keys = loadKeys()
     if (!keys) throw new Error('No local keys found')
 
-    let state = loadState()
+    let state = await loadState()
     const seenIds = allOpIds(state)
     
     const op = createLeaveOp(
@@ -19,7 +19,7 @@ export default defineCommand({
 
     state.set(op.id, op)
     state = await syncWithPeers(state)
-    saveState(state)
+    await saveState(state)
     
     console.log(`Left the webring`)
   }

@@ -1,18 +1,18 @@
-import { deserialize, serialize, merge, deriveView, filterValidOps, fromOps } from '../crdt/index.js'
+import { deserialize, serialize, merge, deriveView, filterValidOps, fromOps, slugify } from '../crdt/index.js'
 import type { RingState, Op } from '../crdt/index.js'
 import fs from 'node:fs'
 import path from 'node:path'
 
 const KEYS_DIR = '.da-ring'
 const KEYS_FILE = 'keys.json'
-const STATE_FILE = 'webring.json'
 
 function keysPath(): string {
   return path.join(process.cwd(), KEYS_DIR, KEYS_FILE)
 }
 
-function statePath(): string {
-  return path.join(process.cwd(), STATE_FILE)
+export async function statePath(): Promise<string> {
+  const config = await loadRingConfig()
+  return path.join(process.cwd(), `${slugify(config.name)}.json`)
 }
 
 export interface LocalKeys {
@@ -35,15 +35,16 @@ export function saveKeys(keys: LocalKeys): void {
   fs.writeFileSync(keysPath(), JSON.stringify(keys, null, 2))
 }
 
-export function loadState(): RingState {
-  const p = statePath()
+export async function loadState(): Promise<RingState> {
+  const p = await statePath()
   if (!fs.existsSync(p)) return new Map()
   const ops = JSON.parse(fs.readFileSync(p, 'utf-8'))
   return deserialize(ops)
 }
 
-export function saveState(state: RingState): void {
-  fs.writeFileSync(statePath(), JSON.stringify(serialize(state), null, 2))
+export async function saveState(state: RingState): Promise<void> {
+  const p = await statePath()
+  fs.writeFileSync(p, JSON.stringify(serialize(state), null, 2))
 }
 
 export async function loadRingConfig(): Promise<{ name: string; inviteBudget: number }> {
@@ -64,8 +65,8 @@ export async function loadRingConfig(): Promise<{ name: string; inviteBudget: nu
   }
 }
 
-export async function fetchRemoteState(url: string): Promise<Op[]> {
-  const target = new URL('/webring.json', url).href
+export async function fetchRemoteState(url: string, ringName: string): Promise<Op[]> {
+  const target = `${url.replace(/\/$/, '')}/${slugify(ringName)}.json`
   const controller = new AbortController()
   const id = setTimeout(() => controller.abort(), 3000)
 
@@ -79,7 +80,7 @@ export async function fetchRemoteState(url: string): Promise<Op[]> {
   }
 }
 
-export async function syncWithPeers(state: RingState): Promise<RingState> {
+export async function syncWithPeers(state: RingState, ringName: string): Promise<RingState> {
   let merged = state
   const fetchedUrls = new Set<string>()
 
@@ -94,7 +95,7 @@ export async function syncWithPeers(state: RingState): Promise<RingState> {
     for (const member of unfetched) {
       fetchedUrls.add(member.url)
       try {
-        const remoteOps = await fetchRemoteState(member.url)
+        const remoteOps = await fetchRemoteState(member.url, ringName)
         const validOps = filterValidOps(remoteOps, merged, member.url, false)
         merged = merge(merged, fromOps(validOps))
       } catch {

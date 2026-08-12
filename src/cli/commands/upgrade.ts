@@ -31,7 +31,7 @@ export default defineCommand({
     state = await syncWithPeers(state)
     
     saveKeys({ publicKey, privateKey, url: args.url })
-    saveState(state)
+    await saveState(state)
     
     console.log(`Upgraded to full membership at ${args.url}`)
   }

@@ -5,7 +5,7 @@ import { deriveView } from '../../crdt/index.js'
 export default defineCommand({
   meta: { name: 'status', description: 'Show webring status and invite tree' },
   run: async () => {
-    const state = loadState()
+    const state = await loadState()
     if (state.size === 0) {
       console.log('\x1b[33m⚠\x1b[0m no ring found. run \x1b[36mda-ring init\x1b[0m first')
       return

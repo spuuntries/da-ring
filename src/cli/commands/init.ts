@@ -1,6 +1,6 @@
 import { defineCommand } from 'citty'
 import { generateKeypair } from '../../crypto/keys.js'
-import { createGenesisOp, createKeyClaimOp, fromOps, allOpIds } from '../../crdt/index.js'
+import { createGenesisOp, createKeyClaimOp, fromOps, allOpIds, slugify } from '../../crdt/index.js'
 import { saveKeys, saveState, loadRingConfig } from '../config.js'
 
 export default defineCommand({
@@ -27,15 +27,15 @@ export default defineCommand({
     const state = fromOps([genesis, keyClaim])
 
     saveKeys({ publicKey, privateKey, url: args.url })
-    saveState(state)
+    await saveState(state)
 
     console.log(`\x1b[32m✓\x1b[0m initialized ring "\x1b[36m${ringName}\x1b[0m"`)
     console.log(`  url: ${args.url}`)
     console.log(`  budget: ${budget} invites per member`)
     console.log()
-    console.log(`  deploy \x1b[33mwebring.json\x1b[0m to your site root`)
+    console.log(`  deploy \x1b[33m${slugify(ringName)}.json\x1b[0m to your site root`)
     console.log()
     console.log(`  friends can join with:`)
-    console.log(`  \x1b[90m<script src="https://your-cdn/widget.js" data-ring="${args.url}"></script>\x1b[0m`)
+    console.log(`  \x1b[90m<script src="https://your-cdn/widget.js" data-ring="${args.url}" data-ring-name="${ringName}"></script>\x1b[0m`)
   },
 })
