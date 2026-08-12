@@ -158,6 +158,15 @@ function computeIdFromOp(op: Op): string {
 
 // ── Transport-Layer Filtering ────────────────────────────────────
 
+function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 /**
  * Filter an array of ops fetched from `sourceUrl`, given the currently known valid state.
  * Returns only the ops that are valid and should be merged.
@@ -208,6 +217,13 @@ export function filterValidOps(
     if (op.type === 'genesis') {
       if (hasGenesis && !currentState.has(op.id)) {
         continue // Reject duplicate/conflicting genesis ops
+      }
+      if (!isSafeUrl(op.author)) {
+        continue // Reject unsafe genesis URL
+      }
+    } else if (op.type === 'add') {
+      if (!isSafeUrl((op as any).payload.target)) {
+        continue // Reject unsafe target URL
       }
     }
 

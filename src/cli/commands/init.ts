@@ -11,6 +11,7 @@ export default defineCommand({
     budget: { type: 'string', description: 'Invite budget per member (overrides ring.config.ts)' },
   },
   run: async ({ args }) => {
+    args.url = args.url.trim()
     const config = await loadRingConfig()
     const ringName = args.name || config.name
     const budget = args.budget ? parseInt(args.budget) : config.inviteBudget

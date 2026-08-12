@@ -9,6 +9,7 @@ export default defineCommand({
     soft: { type: 'boolean', description: 'Soft-revoke (re-parent children instead of cascading)', required: false }
   },
   run: async ({ args }) => {
+    args.url = args.url.trim()
     const keys = loadKeys()
     if (!keys) throw new Error('No local keys found')
 

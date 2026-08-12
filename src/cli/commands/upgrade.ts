@@ -11,6 +11,8 @@ export default defineCommand({
     url: { type: 'string', description: 'Your own URL', required: true }
   },
   run: async ({ args }) => {
+    args.ring = args.ring.trim()
+    args.url = args.url.trim()
     const remoteOps = await fetchRemoteState(args.ring)
     let state = fromOps(filterValidOps(remoteOps, new Map(), args.ring, true))
     

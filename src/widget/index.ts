@@ -1,6 +1,7 @@
 import { merge, deriveView, filterValidOps, fromOps, createState } from '../crdt/index.js'
-import type { Op } from '../crdt/index.js'
+import type { Op, RingView } from '../crdt/index.js'
 import { renderWidget } from './render.js'
+import { escapeHtml, sanitizeView } from './sanitize.js'
 
 async function fetchState(url: string): Promise<Op[] | null> {
   try {
@@ -93,11 +94,16 @@ async function init() {
 
   // 3. Final view and render
   const finalView = deriveView(mergedState)
+  
 
-  if (finalView.members.length === 0) {
-    renderWidget(container, finalView, currentUrl, 'empty')
+
+  const safeView = sanitizeView(finalView)
+  const safeCurrentUrl = escapeHtml(currentUrl)
+
+  if (safeView.members.length === 0) {
+    renderWidget(container, safeView, safeCurrentUrl, 'empty')
   } else {
-    renderWidget(container, finalView, currentUrl, 'loaded')
+    renderWidget(container, safeView, safeCurrentUrl, 'loaded')
   }
 }
 

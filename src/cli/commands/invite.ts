@@ -9,6 +9,7 @@ export default defineCommand({
     name: { type: 'string', description: 'Name of the member' }
   },
   run: async ({ args }) => {
+    args.url = args.url.trim()
     const keys = loadKeys()
     if (!keys) throw new Error('No local keys found')
 
