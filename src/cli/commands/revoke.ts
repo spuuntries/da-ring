@@ -1,6 +1,6 @@
 import { defineCommand } from 'citty'
 import { createRevokeOp, allOpIds } from '../../crdt/index.js'
-import { loadKeys, loadState, saveState, syncWithPeers } from '../config.js'
+import { loadKeys, loadState, saveState, syncWithPeers, loadRingConfig } from '../config.js'
 
 export default defineCommand({
   meta: { name: 'revoke', description: 'Revoke a member from the webring' },
@@ -13,6 +13,7 @@ export default defineCommand({
     const keys = loadKeys()
     if (!keys) throw new Error('No local keys found')
 
+    const config = await loadRingConfig()
     let state = await loadState()
     const seenIds = allOpIds(state)
     
@@ -25,7 +26,7 @@ export default defineCommand({
     )
 
     state.set(op.id, op)
-    state = await syncWithPeers(state)
+    state = await syncWithPeers(state, config.name)
     await saveState(state)
     
     console.log(`${args.soft ? 'Soft-revoked' : 'Revoked'} ${args.url} from the webring`)

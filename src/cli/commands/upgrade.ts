@@ -1,7 +1,7 @@
 import { defineCommand } from 'citty'
 import { generateKeypair } from '../../crypto/keys.js'
 import { createKeyClaimOp, allOpIds } from '../../crdt/index.js'
-import { fetchRemoteState, loadState, saveKeys, saveState, syncWithPeers } from '../config.js'
+import { fetchRemoteState, loadState, saveKeys, saveState, syncWithPeers, loadRingConfig } from '../config.js'
 import { filterValidOps, fromOps } from '../../crdt/index.js'
 
 export default defineCommand({
@@ -13,7 +13,8 @@ export default defineCommand({
   run: async ({ args }) => {
     args.ring = args.ring.trim()
     args.url = args.url.trim()
-    const remoteOps = await fetchRemoteState(args.ring)
+    const config = await loadRingConfig()
+    const remoteOps = await fetchRemoteState(args.ring, config.name)
     let state = fromOps(filterValidOps(remoteOps, new Map(), args.ring, true))
     
     
@@ -28,7 +29,7 @@ export default defineCommand({
     )
 
     state.set(op.id, op)
-    state = await syncWithPeers(state)
+    state = await syncWithPeers(state, config.name)
     
     saveKeys({ publicKey, privateKey, url: args.url })
     await saveState(state)
