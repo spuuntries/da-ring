@@ -1,5 +1,6 @@
 import { verify, hash } from '../crypto/keys.js'
 import type { Op, KeyClaimOp } from './ops.js'
+import { normalizeUrl } from './utils.js'
 import type { RingState } from './state.js'
 
 // ── Validation ───────────────────────────────────────────────────
@@ -131,8 +132,9 @@ export function validateState(state: RingState): ValidationResult {
 /** Find all pubkeys published by a member (multiple key-claims allowed for rotation) */
 function findAllPubkeys(author: string, state: RingState): string[] {
   const keys: string[] = []
+  const targetAuthor = normalizeUrl(author)
   for (const op of state.values()) {
-    if (op.type === 'key-claim' && op.author === author) {
+    if (op.type === 'key-claim' && normalizeUrl(op.author) === targetAuthor) {
       keys.push((op as KeyClaimOp).payload.pubkey)
     }
   }

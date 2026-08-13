@@ -1,5 +1,6 @@
 import { hash, verify } from '../crypto/keys.js'
 import { canonicalizeForVerify } from './validate.js'
+import { normalizeUrl } from './utils.js'
 import type { Op, GenesisOp, AddOp, KeyClaimOp, RevokeOp, LeaveOp } from './ops.js'
 
 const sigCache = new Map<string, boolean>()
@@ -147,8 +148,9 @@ export function deriveView(state: RingState): RingView {
     // Enforce that the op is signed by the EXACT pubkey that is active in the causal timeline right now.
     // This allows key rotation while strictly preventing an attacker from using an old compromised key
     // to sign new ops.
+    const opAuthor = normalizeUrl(op.author)
     if (op.type === 'add' || op.type === 'revoke' || op.type === 'leave') {
-      const member = members.get(op.author)
+      const member = members.get(opAuthor)
       if (!member || !member.pubkey) continue // Ignore ops from inactive/unknown members
       const canonical = canonicalizeForVerify(op)
       if (!verifyCached(canonical, op.sig, member.pubkey)) {
@@ -164,108 +166,109 @@ export function deriveView(state: RingState): RingView {
         inviteBudget = g.payload.inviteBudget
 
         // Genesis author is the first member
-        members.set(g.author, {
-          url: g.author,
+        members.set(opAuthor, {
+          url: opAuthor,
           name: g.author,  // genesis member uses URL as name initially
           invitedBy: null,
           pubkey: null,
           isActive: false,
           depth: 0,
         })
-        inviteTree.set(g.author, [])
-        invitesUsed.set(g.author, 0)
+        inviteTree.set(opAuthor, [])
+        invitesUsed.set(opAuthor, 0)
         break
       }
 
       case 'add': {
         const a = op as AddOp
+        const target = normalizeUrl(a.payload.target)
         // Skip if author is not a current member or is revoked
-        if (!members.has(a.author) || revoked.has(a.author)) break
+        if (!members.has(opAuthor) || revoked.has(opAuthor)) break
         // Skip if target already exists
-        if (members.has(a.payload.target)) break
+        if (members.has(target)) break
         // Check invite budget
-        const used = invitesUsed.get(a.author) ?? 0
+        const used = invitesUsed.get(opAuthor) ?? 0
         if (used >= inviteBudget) break
 
         // If target was previously revoked, clear it so they can be re-added
-        revoked.delete(a.payload.target)
+        revoked.delete(target)
 
-        const inviterMember = members.get(a.author)!
-        members.set(a.payload.target, {
-          url: a.payload.target,
+        const inviterMember = members.get(opAuthor)!
+        members.set(target, {
+          url: target,
           name: a.payload.name,
-          invitedBy: a.author,
+          invitedBy: opAuthor,
           pubkey: null,
           isActive: false,
           depth: inviterMember.depth + 1,
         })
-        inviterOf.set(a.payload.target, a.author)
+        inviterOf.set(target, opAuthor)
 
         // Update invite tree
-        const children = inviteTree.get(a.author) ?? []
-        children.push(a.payload.target)
-        inviteTree.set(a.author, children)
-        if (!inviteTree.has(a.payload.target)) {
-          inviteTree.set(a.payload.target, [])
+        const children = inviteTree.get(opAuthor) ?? []
+        children.push(target)
+        inviteTree.set(opAuthor, children)
+        if (!inviteTree.has(target)) {
+          inviteTree.set(target, [])
         }
 
-        invitesUsed.set(a.author, used + 1)
+        invitesUsed.set(opAuthor, used + 1)
         break
       }
 
       case 'key-claim': {
         const k = op as KeyClaimOp
         // Must be an existing member
-        const member = members.get(k.author)
-        if (!member || revoked.has(k.author)) break
+        const member = members.get(opAuthor)
+        if (!member || revoked.has(opAuthor)) break
 
         member.pubkey = k.payload.pubkey
         member.isActive = true
-        activeMembers.add(k.author)
+        activeMembers.add(opAuthor)
         break
       }
 
       case 'revoke': {
         const r = op as RevokeOp
+        const targetUrl = normalizeUrl(r.payload.target)
         // Author must be the direct inviter of target
-        if (revoked.has(r.author)) break
-        if (inviterOf.get(r.payload.target) !== r.author) break
+        if (revoked.has(opAuthor)) break
+        if (inviterOf.get(targetUrl) !== opAuthor) break
 
         if (r.payload.reparent) {
-          // Soft-revoke: Reparent target's children to the revoker (r.author)
-          const targetUrl = r.payload.target
+          // Soft-revoke: Reparent target's children to the revoker (opAuthor)
           
           revoked.add(targetUrl)
           members.delete(targetUrl)
           activeMembers.delete(targetUrl)
           
           // Remove target from revoker's invite tree
-          const parentChildren = inviteTree.get(r.author) ?? []
-          inviteTree.set(r.author, parentChildren.filter(c => c !== targetUrl))
+          const parentChildren = inviteTree.get(opAuthor) ?? []
+          inviteTree.set(opAuthor, parentChildren.filter(c => c !== targetUrl))
           inviterOf.delete(targetUrl)
           
           // Re-parent children
           const targetChildren = inviteTree.get(targetUrl) ?? []
-          const inviterChildren = inviteTree.get(r.author) ?? []
+          const inviterChildren = inviteTree.get(opAuthor) ?? []
           for (const child of targetChildren) {
-            inviterOf.set(child, r.author)
+            inviterOf.set(child, opAuthor)
             const childMember = members.get(child)
             if (childMember) {
-              childMember.invitedBy = r.author
-              const inviterMember = members.get(r.author)
+              childMember.invitedBy = opAuthor
+              const inviterMember = members.get(opAuthor)
               if (inviterMember) childMember.depth = inviterMember.depth + 1
             }
             inviterChildren.push(child)
           }
-          inviteTree.set(r.author, inviterChildren)
+          inviteTree.set(opAuthor, inviterChildren)
           inviteTree.delete(targetUrl)
           
           // Give the inviter their invite slot back
-          const used = invitesUsed.get(r.author) ?? 0
-          invitesUsed.set(r.author, Math.max(0, used - 1))
+          const used = invitesUsed.get(opAuthor) ?? 0
+          invitesUsed.set(opAuthor, Math.max(0, used - 1))
         } else {
           // Hard-revoke: Cascade (existing logic)
-          const toRevoke = [r.payload.target]
+          const toRevoke = [targetUrl]
           while (toRevoke.length > 0) {
             const url = toRevoke.pop()!
             if (revoked.has(url)) continue
@@ -288,8 +291,8 @@ export function deriveView(state: RingState): RingView {
           }
 
           // Give the inviter their invite slot back
-          const used = invitesUsed.get(r.author) ?? 0
-          invitesUsed.set(r.author, Math.max(0, used - 1))
+          const used = invitesUsed.get(opAuthor) ?? 0
+          invitesUsed.set(opAuthor, Math.max(0, used - 1))
         }
         break
       }
@@ -297,12 +300,12 @@ export function deriveView(state: RingState): RingView {
       case 'leave': {
         const l = op as LeaveOp
         // Must be an existing member
-        if (!members.has(l.author) || revoked.has(l.author)) break
+        if (!members.has(opAuthor) || revoked.has(opAuthor)) break
 
-        const inviter = inviterOf.get(l.author)
+        const inviter = inviterOf.get(opAuthor)
 
         // Re-parent children to the leaver's inviter
-        const children = inviteTree.get(l.author) ?? []
+        const children = inviteTree.get(opAuthor) ?? []
         if (inviter) {
           const inviterChildren = inviteTree.get(inviter) ?? []
           for (const child of children) {
@@ -316,7 +319,7 @@ export function deriveView(state: RingState): RingView {
             }
             inviterChildren.push(child)
           }
-          inviteTree.set(inviter, inviterChildren.filter(c => c !== l.author))
+          inviteTree.set(inviter, inviterChildren.filter(c => c !== opAuthor))
 
           // Give inviter back the slot
           const used = invitesUsed.get(inviter) ?? 0
@@ -324,9 +327,9 @@ export function deriveView(state: RingState): RingView {
         }
 
         // Remove the member
-        members.delete(l.author)
-        activeMembers.delete(l.author)
-        inviteTree.delete(l.author)
+        members.delete(opAuthor)
+        activeMembers.delete(opAuthor)
+        inviteTree.delete(opAuthor)
         break
       }
     }
