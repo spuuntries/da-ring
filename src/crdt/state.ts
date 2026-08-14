@@ -1,6 +1,6 @@
 import { hash, verify } from '../crypto/keys.js'
 import { canonicalizeForVerify } from './validate.js'
-import { normalizeUrl } from './utils.js'
+import { normalizeUrl, urlMatch } from './utils.js'
 import type { Op, GenesisOp, AddOp, KeyClaimOp, RevokeOp, LeaveOp } from './ops.js'
 
 const sigCache = new Map<string, boolean>()
@@ -44,7 +44,7 @@ export function merge(a: RingState, b: RingState): RingState {
 
 /** Serialize ring state to JSON-safe format */
 export function serialize(state: RingState): Op[] {
-  return [...state.values()].sort((a, b) => a.id.localeCompare(b.id))
+  return [...state.values()].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 }
 
 /** Deserialize from JSON array */
@@ -110,7 +110,7 @@ function topoSort(state: RingState): Op[] {
   }
 
   // Sort ops by ID first for deterministic tie-breaking
-  ops.sort((a, b) => a.id.localeCompare(b.id))
+  ops.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
   for (const op of ops) {
     visit(op)
   }
@@ -361,7 +361,7 @@ export function deriveRingOrder(members: Member[]): Member[] {
   return [...members].sort((a, b) => {
     const ha = hash(a.url)
     const hb = hash(b.url)
-    return ha.localeCompare(hb)
+    return ha < hb ? -1 : ha > hb ? 1 : 0
   })
 }
 
@@ -371,7 +371,7 @@ export function deriveRingOrder(members: Member[]): Member[] {
 export function getNeighbors(members: Member[], currentUrl: string): { prev: Member | null, next: Member | null } {
   if (members.length === 0) return { prev: null, next: null }
 
-  const idx = members.findIndex(m => m.url === currentUrl)
+  const idx = members.findIndex(m => urlMatch(m.url, currentUrl))
   if (idx === -1) {
     // Not in the ring — just return first/last as neighbors
     return { prev: members[members.length - 1], next: members[0] }

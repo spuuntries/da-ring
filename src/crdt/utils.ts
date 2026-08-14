@@ -13,3 +13,13 @@ export function slugify(text: string): string {
 export function normalizeUrl(url: string): string {
   return url.replace(/\/$/, '')
 }
+
+export function urlMatch(a: string, b: string): boolean {
+  try {
+    const uA = new URL(a)
+    const uB = new URL(b)
+    return uA.hostname === uB.hostname
+  } catch {
+    return normalizeUrl(a) === normalizeUrl(b)
+  }
+}

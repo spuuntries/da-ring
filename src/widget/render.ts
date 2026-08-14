@@ -1,5 +1,5 @@
 import type { RingView } from '../crdt/index.js'
-import { getNeighbors } from '../crdt/index.js'
+import { getNeighbors, urlMatch } from '../crdt/index.js'
 
 const styles = `
   :host {
@@ -182,7 +182,7 @@ export function renderWidget(
   const { prev, next } = getNeighbors(view.members, currentUrl)
 
   const memberListHtml = view.members.map(m => {
-    const isCurrent = m.url === currentUrl
+    const isCurrent = urlMatch(m.url, currentUrl)
     return `<a class="member-item${isCurrent ? ' current' : ''}" href="${m.url}">${m.url}<span class="member-name">${m.name}</span></a>`
   }).join('')
 
